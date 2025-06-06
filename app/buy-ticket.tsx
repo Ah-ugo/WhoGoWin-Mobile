@@ -1,5 +1,6 @@
 import { apiService } from "@/services/apiService";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -24,33 +25,59 @@ interface Draw {
   total_pot: number;
 }
 
+interface Params {
+  drawId: string;
+  price: string;
+}
+
+type IoniconsName = "arrow-back" | "ticket-outline" | "card-outline";
+
 export default function BuyTicket() {
   const router = useRouter();
-  const { drawId, price } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const drawId = typeof params.drawId === "string" ? params.drawId : "";
+  const price = typeof params.price === "string" ? params.price : "";
   const [draw, setDraw] = useState<Draw | null>(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
 
   const scale = useSharedValue(1);
-  const rotation = useSharedValue(0);
+  const rotate = useSharedValue(0);
+  const buttonScale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
-      transform: [{ scale: scale.value }, { rotateY: `${rotation.value}deg` }],
+      transform: [{ scale: scale.value }, { rotate: `${rotate.value}deg` }],
+    };
+  });
+
+  const animatedButtonStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: buttonScale.value }],
     };
   });
 
   useEffect(() => {
+    if (!drawId || !price) {
+      Alert.alert("Error", "Invalid draw or price");
+      router.back();
+      return;
+    }
     fetchDrawDetails();
-  }, []);
+  }, [drawId, price]);
 
   const fetchDrawDetails = async () => {
     try {
       const response = await apiService.get(`/draws/${drawId}`);
       setDraw(response.data);
-    } catch (error) {
-      console.error("Error fetching draw details:", error);
-      Alert.alert("Error", "Failed to load draw details");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error && "response" in error
+          ? (error as any).response?.data?.detail ||
+            "Failed to load draw details"
+          : "Failed to load draw details";
+      console.error("Error fetching draw details:", message);
+      Alert.alert("Error", message);
       router.back();
     } finally {
       setLoading(false);
@@ -62,16 +89,17 @@ export default function BuyTicket() {
 
     // Animate the ticket
     scale.value = withSequence(withSpring(1.1), withSpring(0.9), withSpring(1));
-    rotation.value = withSequence(
-      withSpring(10),
-      withSpring(-10),
-      withSpring(0)
-    );
+    rotate.value = withSequence(withSpring(10), withSpring(-10), withSpring(0));
+
+    // Animate the button
+    buttonScale.value = withSpring(0.95, { duration: 100 }, () => {
+      buttonScale.value = withSpring(1);
+    });
 
     try {
       await apiService.post("/tickets/buy", {
         draw_id: drawId,
-        ticket_price: parseInt(price as string),
+        ticket_price: parseInt(price),
       });
 
       Alert.alert(
@@ -88,11 +116,12 @@ export default function BuyTicket() {
           },
         ]
       );
-    } catch (error: any) {
-      Alert.alert(
-        "Purchase Failed",
-        error.response?.data?.detail || "Failed to purchase ticket"
-      );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error && "response" in error
+          ? (error as any).response?.data?.detail || "Failed to purchase ticket"
+          : "Failed to purchase ticket";
+      Alert.alert("Purchase Failed", message);
     } finally {
       setPurchasing(false);
     }
@@ -117,7 +146,7 @@ export default function BuyTicket() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#d4af37" />
         <Text style={styles.loadingText}>Loading draw details...</Text>
       </View>
     );
@@ -133,12 +162,18 @@ export default function BuyTicket() {
 
   return (
     <View style={styles.container}>
+      <LinearGradient
+        colors={["#0a0a0a", "#1a1a1a"]}
+        style={styles.backgroundGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
+          <Ionicons name="arrow-back" size={24} color="#d4af37" />
         </TouchableOpacity>
         <Text style={styles.title}>Buy Ticket</Text>
         <View style={styles.placeholder} />
@@ -148,7 +183,7 @@ export default function BuyTicket() {
         <Animated.View style={[styles.ticketCard, animatedStyle]}>
           <View style={styles.ticketHeader}>
             <Text style={styles.ticketTitle}>Lottery Ticket</Text>
-            <Ionicons name="ticket" size={32} color="#007AFF" />
+            <Ionicons name="ticket-outline" size={32} color="#d4af37" />
           </View>
 
           <View style={styles.ticketDetails}>
@@ -159,7 +194,7 @@ export default function BuyTicket() {
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Ticket Price:</Text>
               <Text style={styles.detailValue}>
-                ₦{parseInt(price as string).toLocaleString()}
+                ₦{parseInt(price).toLocaleString()}
               </Text>
             </View>
             <View style={styles.detailRow}>
@@ -199,7 +234,7 @@ export default function BuyTicket() {
             You are about to purchase a {draw.draw_type.toLowerCase()} lottery
             ticket for{" "}
             <Text style={styles.confirmationPrice}>
-              ₦{parseInt(price as string).toLocaleString()}
+              ₦{parseInt(price).toLocaleString()}
             </Text>
           </Text>
           <Text style={styles.confirmationNote}>
@@ -216,25 +251,34 @@ export default function BuyTicket() {
           <Text style={styles.cancelButtonText}>Cancel</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.purchaseButton,
-            purchasing && styles.purchaseButtonDisabled,
-          ]}
-          onPress={handlePurchase}
-          disabled={purchasing}
-        >
-          {purchasing ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <>
-              <Ionicons name="card" size={20} color="#FFFFFF" />
-              <Text style={styles.purchaseButtonText}>
-                Buy Ticket - ₦{parseInt(price as string).toLocaleString()}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
+        <Animated.View style={animatedButtonStyle}>
+          <TouchableOpacity
+            style={[
+              { paddingHorizontal: 20 },
+              styles.purchaseButton,
+              purchasing && styles.purchaseButtonDisabled,
+            ]}
+            onPress={handlePurchase}
+            disabled={purchasing}
+          >
+            <LinearGradient
+              colors={["#d4af37", "#b8941f"]}
+              style={styles.purchaseButtonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            />
+            {purchasing ? (
+              <ActivityIndicator size="small" color="#0a0a0a" />
+            ) : (
+              <>
+                <Ionicons name="card-outline" size={20} color="#0a0a0a" />
+                <Text style={styles.purchaseButtonText}>
+                  Buy Ticket - ₦{parseInt(price).toLocaleString()}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
       </View>
     </View>
   );
@@ -243,64 +287,69 @@ export default function BuyTicket() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F2F2F7",
+  },
+  backgroundGradient: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#0a0a0a",
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: "#86868B",
+    color: "rgba(255, 255, 255, 0.7)",
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#0a0a0a",
   },
   errorText: {
     fontSize: 18,
-    color: "#FF3B30",
+    color: "#e67e22",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 60,
     paddingBottom: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
   backButton: {
     padding: 8,
   },
   title: {
     fontSize: 20,
-    fontWeight: "bold",
-    color: "#1D1D1F",
+    fontWeight: "700",
+    color: "#ffffff",
+    letterSpacing: -0.5,
   },
   placeholder: {
     width: 40,
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: 24,
   },
   ticketCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderRadius: 12,
     padding: 24,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-    borderWidth: 2,
-    borderColor: "#007AFF",
-    borderStyle: "dashed",
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   ticketHeader: {
     flexDirection: "row",
@@ -309,12 +358,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#F2F2F7",
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
   ticketTitle: {
     fontSize: 24,
-    fontWeight: "bold",
-    color: "#1D1D1F",
+    fontWeight: "700",
+    color: "#ffffff",
+    letterSpacing: -0.5,
   },
   ticketDetails: {
     marginBottom: 20,
@@ -327,25 +377,27 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 16,
-    color: "#86868B",
+    color: "rgba(255, 255, 255, 0.7)",
   },
   detailValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1D1D1F",
+    color: "#ffffff",
   },
   timeRemaining: {
-    color: "#FF3B30",
+    color: "#e67e22",
   },
   prizeBreakdown: {
-    backgroundColor: "#F8F9FA",
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
     padding: 16,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
   },
   prizeTitle: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#1D1D1F",
+    fontWeight: "700",
+    color: "#ffffff",
     marginBottom: 12,
   },
   prizeRow: {
@@ -356,47 +408,45 @@ const styles = StyleSheet.create({
   },
   prizeLabel: {
     fontSize: 14,
-    color: "#86868B",
+    color: "rgba(255, 255, 255, 0.7)",
   },
   prizeValue: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#34C759",
+    color: "#27ae60",
   },
   confirmationCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     padding: 20,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   confirmationTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#1D1D1F",
+    fontWeight: "700",
+    color: "#ffffff",
     marginBottom: 12,
+    letterSpacing: -0.5,
   },
   confirmationText: {
     fontSize: 16,
-    color: "#86868B",
+    color: "rgba(255, 255, 255, 0.7)",
     lineHeight: 24,
     marginBottom: 8,
   },
   confirmationPrice: {
-    fontWeight: "bold",
-    color: "#007AFF",
+    fontWeight: "700",
+    color: "#d4af37",
   },
   confirmationNote: {
     fontSize: 14,
-    color: "#FF9500",
+    color: "#c0c0c0",
     fontStyle: "italic",
   },
   footer: {
     flexDirection: "row",
-    padding: 20,
+    padding: 24,
     gap: 12,
   },
   cancelButton: {
@@ -404,23 +454,30 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#D1D1D6",
+    borderColor: "rgba(255, 255, 255, 0.1)",
     alignItems: "center",
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#86868B",
+    color: "#c0c0c0",
   },
   purchaseButton: {
     flex: 2,
-    backgroundColor: "#007AFF",
-    paddingVertical: 16,
     borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+  },
+  purchaseButtonGradient: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingVertical: 16,
+    borderRadius: 12,
   },
   purchaseButtonDisabled: {
     opacity: 0.6,
@@ -428,6 +485,6 @@ const styles = StyleSheet.create({
   purchaseButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: "#0a0a0a",
   },
 });

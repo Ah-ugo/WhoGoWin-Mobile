@@ -1,6 +1,5 @@
 import axios from "axios";
 
-// Replace with your actual backend URL
 const BASE_URL = "https://whogowin.onrender.com/api/v1";
 
 export const apiService = axios.create({
@@ -14,12 +13,13 @@ export const apiService = axios.create({
 // Request interceptor
 apiService.interceptors.request.use(
   (config) => {
-    console.log(
-      `Making ${config.method?.toUpperCase()} request to ${config.url}`
-    );
+    const method = config.method?.toUpperCase();
+    const url = `${config.baseURL}${config.url}`;
+    console.log(`📤 ${method} request to ${url}`);
     return config;
   },
   (error) => {
+    console.error("❌ Request error:", error.message);
     return Promise.reject(error);
   }
 );
@@ -30,7 +30,14 @@ apiService.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error("API Error:", error.response?.data || error.message);
+    if (error.response) {
+      console.error("❌ API Response Error:", {
+        status: error.response.status,
+        data: error.response.data,
+      });
+    } else {
+      console.error("❌ Network or Timeout Error:", error.message);
+    }
     return Promise.reject(error);
   }
 );
