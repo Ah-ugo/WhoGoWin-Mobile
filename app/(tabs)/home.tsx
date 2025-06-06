@@ -14,7 +14,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { apiService } from "../../services/apiService";
 
 interface Draw {
-  _id: string;
+  id: string;
   draw_type: string;
   end_time: string;
   total_pot: number;
@@ -134,7 +134,7 @@ export default function Home() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Active Draws</Text>
         {activeDraws.map((draw) => (
-          <View key={draw._id} style={styles.drawCard}>
+          <View key={draw.id} style={styles.drawCard}>
             <View style={styles.drawHeader}>
               <Text style={styles.drawType}>{draw.draw_type} Draw</Text>
               <Text style={styles.timeRemaining}>
