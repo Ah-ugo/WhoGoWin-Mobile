@@ -66,6 +66,7 @@ export default function Results() {
     silver: ["#c0c0c0", "#a8a8a8"],
     bronze: ["#cd7f32", "#a66a2a"],
     card: ["rgba(255,255,255,0.05)", "rgba(255,255,255,0.02)"],
+    accent: ["#1a1a2e", "#16213e"],
   };
 
   const fetchResults = async () => {
@@ -83,7 +84,19 @@ export default function Results() {
   useEffect(() => {
     fetchResults();
     startAnimations();
+    startFloatingAnimation();
   }, []);
+
+  const startFloatingAnimation = () => {
+    const repeatFloat = () => {
+      floatingAnimation.value = withSequence(
+        withTiming(1, { duration: 3000 }),
+        withTiming(-1, { duration: 3000 }),
+        withTiming(0, { duration: 0 }, () => runOnJS(repeatFloat)())
+      );
+    };
+    repeatFloat();
+  };
 
   const startAnimations = () => {
     headerTranslateY.value = withSpring(0, { damping: 25, stiffness: 120 });
@@ -100,15 +113,6 @@ export default function Results() {
       withSpring(1, { damping: 20, stiffness: 150 })
     );
     spinnerOpacity.value = withDelay(300, withTiming(1, { duration: 800 }));
-
-    const repeatFloat = () => {
-      floatingAnimation.value = withSequence(
-        withTiming(1, { duration: 3000 }),
-        withTiming(-1, { duration: 3000 }),
-        withTiming(0, { duration: 0 }, () => runOnJS(repeatFloat)())
-      );
-    };
-    repeatFloat();
   };
 
   const onRefresh = () => {
@@ -144,9 +148,16 @@ export default function Results() {
     });
   };
 
-  const AnimatedResultCard = ({ result }: { result: DrawResult }) => {
+  const AnimatedResultCard = ({
+    result,
+    index,
+  }: {
+    result: DrawResult;
+    index: number;
+  }) => {
     const scale = useSharedValue(1);
     const rotation = useSharedValue(0);
+    const cardDelay = index * 100;
 
     const animatedStyle = useAnimatedStyle(() => {
       return {
@@ -160,19 +171,20 @@ export default function Results() {
     });
 
     const handlePress = () => {
-      scale.value = withSequence(withSpring(0.95), withSpring(1));
+      scale.value = withSequence(withSpring(0.96), withSpring(1));
       rotation.value = withSequence(
-        withSpring(5),
-        withSpring(-5),
+        withSpring(2),
+        withSpring(-2),
         withSpring(0)
       );
       toggleCard(result._id);
     };
 
     return (
-      <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
+      <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
         <Animated.View style={[styles.resultCard, animatedStyle]}>
           <View style={styles.resultCardContent}>
+            {/* Header Section */}
             <View style={styles.resultHeader}>
               <View style={styles.drawTypeSection}>
                 <View style={styles.drawIconContainer}>
@@ -190,85 +202,111 @@ export default function Results() {
                 </View>
               </View>
               <View style={styles.potContainer}>
-                <Text style={styles.potLabel}>Total Pot</Text>
+                <Text style={styles.potLabel}>Prize Pool</Text>
                 <Text style={styles.potAmount}>
                   ₦{result.total_pot.toLocaleString()}
                 </Text>
               </View>
             </View>
 
+            <View style={styles.divider} />
+
+            {/* First Place Winner */}
             {result.first_place_winner && (
               <View style={styles.winnerSection}>
-                <LinearGradient
-                  colors={gradientColors.gold}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.winnerCard}
-                >
-                  <View style={styles.winnerHeader}>
-                    <View style={styles.winnerIconContainer}>
-                      <Ionicons name="trophy" size={20} color="#ffffff" />
+                <View style={styles.winnerCard}>
+                  <LinearGradient
+                    colors={gradientColors.gold}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.winnerGradient}
+                  >
+                    <View style={styles.winnerHeader}>
+                      <View style={styles.winnerIconContainer}>
+                        <Ionicons name="trophy" size={18} color="#ffffff" />
+                      </View>
+                      <Text style={styles.winnerTitle}>Champion</Text>
                     </View>
-                    <Text style={styles.winnerTitle}>First Place Winner</Text>
-                  </View>
-                  <View style={styles.winnerDetails}>
-                    <Text style={styles.winnerName}>
-                      {result.first_place_winner.name}
-                    </Text>
-                    <Text style={styles.winnerPrize}>
-                      ₦{result.first_place_winner.prize_amount.toLocaleString()}
-                    </Text>
-                  </View>
-                </LinearGradient>
+                    <View style={styles.winnerDetails}>
+                      <Text style={styles.winnerName}>
+                        {result.first_place_winner.name}
+                      </Text>
+                      <Text style={styles.winnerPrize}>
+                        ₦
+                        {result.first_place_winner.prize_amount.toLocaleString()}
+                      </Text>
+                    </View>
+                  </LinearGradient>
+                </View>
               </View>
             )}
 
+            {/* Consolation Winners - Expanded */}
             {expandedCard === result._id &&
               result.consolation_winners.length > 0 && (
                 <View style={styles.consolationSection}>
-                  <Text style={styles.consolationTitle}>
-                    Consolation Winners
-                  </Text>
+                  <View style={styles.consolationHeader}>
+                    <Text style={styles.consolationTitle}>Other Winners</Text>
+                    <Text style={styles.consolationCount}>
+                      {result.consolation_winners.length}
+                    </Text>
+                  </View>
                   <View style={styles.consolationGrid}>
                     {result.consolation_winners.map((winner, index) => (
-                      <LinearGradient
-                        key={index}
-                        colors={
-                          index < 3
-                            ? gradientColors.silver
-                            : gradientColors.bronze
-                        }
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.consolationCard}
-                      >
-                        <View style={styles.consolationPlacement}>
-                          <Text style={styles.consolationPlacementText}>
-                            #{index + 1}
-                          </Text>
-                        </View>
-                        <View style={styles.consolationWinner}>
-                          <Text style={styles.consolationName}>
-                            {winner.name}
-                          </Text>
-                          <Text style={styles.consolationPrize}>
-                            ₦{winner.prize_amount.toLocaleString()}
-                          </Text>
-                        </View>
-                      </LinearGradient>
+                      <View key={index} style={styles.consolationWrapper}>
+                        <LinearGradient
+                          colors={
+                            index < 2
+                              ? gradientColors.silver
+                              : gradientColors.bronze
+                          }
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.consolationCard}
+                        >
+                          <View style={styles.consolationRank}>
+                            <Text style={styles.consolationRankText}>
+                              #{index + 2}
+                            </Text>
+                          </View>
+                          <View style={styles.consolationInfo}>
+                            <Text
+                              style={styles.consolationName}
+                              numberOfLines={1}
+                            >
+                              {winner.name}
+                            </Text>
+                            <Text style={styles.consolationPrize}>
+                              ₦{winner.prize_amount.toLocaleString()}
+                            </Text>
+                          </View>
+                        </LinearGradient>
+                      </View>
                     ))}
                   </View>
                 </View>
               )}
 
-            <View style={styles.expandIndicator}>
-              <Ionicons
-                name={
-                  expandedCard === result._id ? "chevron-up" : "chevron-down"
-                }
-                size={20}
-                color="rgba(255,255,255,0.7)"
-              />
+            {/* Expand/Collapse Indicator */}
+            <View style={styles.expandSection}>
+              <TouchableOpacity
+                style={styles.expandButton}
+                onPress={handlePress}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.expandText}>
+                  {expandedCard === result._id
+                    ? "Show Less"
+                    : "Show All Winners"}
+                </Text>
+                <Ionicons
+                  name={
+                    expandedCard === result._id ? "chevron-up" : "chevron-down"
+                  }
+                  size={16}
+                  color="rgba(255,255,255,0.7)"
+                />
+              </TouchableOpacity>
             </View>
           </View>
         </Animated.View>
@@ -283,18 +321,11 @@ export default function Results() {
     };
   });
 
-  const animatedCardStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateY: cardsTranslateY.value }],
-      opacity: cardsOpacity.value,
-    };
-  });
-
   const animatedSpinnerStyle = useAnimatedStyle(() => {
     const floatingOffset = interpolate(
       floatingAnimation.value,
       [-1, 0, 1],
-      [-2, 0, 2]
+      [-3, 0, 3]
     );
     return {
       transform: [
@@ -318,12 +349,12 @@ export default function Results() {
               style={[styles.loadingSpinner, animatedSpinnerStyle]}
             >
               <View style={styles.loadingSpinnerInner}>
-                <Ionicons name="trophy-outline" size={48} color="#d4af37" />
+                <Ionicons name="trophy-outline" size={40} color="#d4af37" />
               </View>
             </Animated.View>
             <Text style={styles.loadingText}>Loading Results</Text>
             <Text style={styles.loadingSubtext}>
-              Fetching the latest draw winners
+              Fetching the latest winners
             </Text>
           </View>
         </LinearGradient>
@@ -339,11 +370,6 @@ export default function Results() {
         style={styles.backgroundGradient}
       />
 
-      <Animated.View style={[styles.header, animatedHeaderStyle]}>
-        <Text style={styles.title}>Draw Results</Text>
-        <Text style={styles.subtitle}>See who won the latest draws</Text>
-      </Animated.View>
-
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -358,21 +384,48 @@ export default function Results() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {results.map((result) => (
-          <AnimatedResultCard key={result._id} result={result} />
-        ))}
-
-        {results.length === 0 && (
-          <Animated.View style={[styles.emptyState, animatedCardStyle]}>
-            <View style={styles.emptyStateIcon}>
-              <Ionicons name="trophy-outline" size={48} color="#666666" />
+        <Animated.View style={[styles.header, animatedHeaderStyle]}>
+          <View style={styles.headerContent}>
+            <View style={styles.titleSection}>
+              <Text style={styles.title}>Draw Results</Text>
+              <Text style={styles.subtitle}>Latest winners and prizes</Text>
             </View>
-            <Text style={styles.emptyStateText}>No Results Yet</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Results will appear here after draws are completed
+            <View style={styles.headerIcon}>
+              <View style={styles.headerIconContainer}>
+                <Ionicons name="trophy-outline" size={20} color="#d4af37" />
+              </View>
+            </View>
+          </View>
+        </Animated.View>
+
+        <View style={styles.resultsSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Draws</Text>
+            <Text style={styles.sectionSubtitle}>
+              {results.length} completed
             </Text>
-          </Animated.View>
-        )}
+          </View>
+
+          {results.map((result, index) => (
+            <AnimatedResultCard
+              key={result._id}
+              result={result}
+              index={index}
+            />
+          ))}
+
+          {results.length === 0 && (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyStateIcon}>
+                <Ionicons name="trophy-outline" size={32} color="#666666" />
+              </View>
+              <Text style={styles.emptyStateText}>No Results Yet</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Results will appear here after draws are completed
+              </Text>
+            </View>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -400,9 +453,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   loadingSpinnerInner: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: "rgba(212, 175, 55, 0.1)",
     justifyContent: "center",
     alignItems: "center",
@@ -411,15 +464,15 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "600",
     textAlign: "center",
     marginBottom: 8,
     letterSpacing: -0.5,
   },
   loadingSubtext: {
     color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 16,
+    fontSize: 14,
     textAlign: "center",
   },
   scrollView: {
@@ -431,10 +484,18 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
     paddingTop: Platform.OS === "ios" ? 60 : 40,
-    paddingBottom: 24,
+    paddingBottom: 32,
+  },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  titleSection: {
+    flex: 1,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "700",
     color: "#ffffff",
     letterSpacing: -0.5,
@@ -445,11 +506,41 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.7)",
     fontWeight: "400",
   },
+  headerIcon: {
+    padding: 4,
+  },
+  headerIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(212, 175, 55, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  resultsSection: {
+    paddingHorizontal: 24,
+  },
+  sectionHeader: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#ffffff",
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.6)",
+    fontWeight: "400",
+  },
   resultCard: {
-    marginHorizontal: 24,
-    marginBottom: 16,
     backgroundColor: "rgba(255, 255, 255, 0.05)",
     borderRadius: 16,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
     overflow: "hidden",
@@ -460,7 +551,7 @@ const styles = StyleSheet.create({
   resultHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     marginBottom: 16,
   },
   drawTypeSection: {
@@ -468,9 +559,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   drawIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "rgba(212, 175, 55, 0.1)",
     borderWidth: 1,
     borderColor: "rgba(212, 175, 55, 0.2)",
@@ -479,13 +570,13 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   drawType: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
     color: "#ffffff",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   drawDate: {
-    fontSize: 13,
+    fontSize: 12,
     color: "rgba(255, 255, 255, 0.7)",
     fontWeight: "500",
   },
@@ -501,16 +592,24 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   potAmount: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "700",
     color: "#d4af37",
     letterSpacing: -0.5,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    marginBottom: 16,
   },
   winnerSection: {
     marginBottom: 16,
   },
   winnerCard: {
     borderRadius: 12,
+    overflow: "hidden",
+  },
+  winnerGradient: {
     padding: 16,
   },
   winnerHeader: {
@@ -519,30 +618,32 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   winnerIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 10,
   },
   winnerTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     color: "#ffffff",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   winnerDetails: {
     paddingLeft: 8,
   },
   winnerName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
     color: "#ffffff",
     marginBottom: 4,
   },
   winnerPrize: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     color: "#ffffff",
     letterSpacing: -0.5,
@@ -550,56 +651,88 @@ const styles = StyleSheet.create({
   consolationSection: {
     marginBottom: 16,
   },
-  consolationTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
+  consolationHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 12,
     paddingLeft: 8,
+  },
+  consolationTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  consolationCount: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.6)",
+    fontWeight: "500",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   consolationGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
   },
-  consolationCard: {
+  consolationWrapper: {
     width: (width - 72) / 2,
-    borderRadius: 12,
+  },
+  consolationCard: {
+    borderRadius: 10,
     padding: 12,
     flexDirection: "row",
     alignItems: "center",
   },
-  consolationPlacement: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.2)",
+  consolationRank: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 10,
   },
-  consolationPlacementText: {
-    fontSize: 14,
+  consolationRankText: {
+    fontSize: 12,
     fontWeight: "700",
     color: "#ffffff",
   },
-  consolationWinner: {
+  consolationInfo: {
     flex: 1,
   },
   consolationName: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#ffffff",
     fontWeight: "500",
     marginBottom: 2,
   },
   consolationPrize: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: "#ffffff",
   },
-  expandIndicator: {
+  expandSection: {
     alignItems: "center",
     paddingTop: 8,
+  },
+  expandButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    gap: 6,
+  },
+  expandText: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.7)",
+    fontWeight: "500",
   },
   emptyState: {
     alignItems: "center",
@@ -607,25 +740,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyStateIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: "rgba(255, 255, 255, 0.05)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 16,
   },
   emptyStateText: {
-    fontSize: 18,
+    fontSize: 16,
     color: "#ffffff",
     fontWeight: "600",
     textAlign: "center",
     marginBottom: 8,
   },
   emptyStateSubtext: {
-    fontSize: 16,
+    fontSize: 14,
     color: "rgba(255, 255, 255, 0.6)",
     textAlign: "center",
   },

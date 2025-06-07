@@ -36,6 +36,9 @@ interface Transaction {
   description: string;
   date: string;
   status: string;
+  account_name?: string;
+  bank_name?: string;
+  account_number?: string;
 }
 
 interface WalletData {
@@ -52,6 +55,9 @@ export default function Wallet() {
   const [refreshing, setRefreshing] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [showTopUp, setShowTopUp] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
 
@@ -64,8 +70,6 @@ export default function Wallet() {
   const balanceOpacity = useSharedValue(0);
   const cardsTranslateY = useSharedValue(100);
   const cardsOpacity = useSharedValue(0);
-  const spinnerScale = useSharedValue(0.8);
-  const spinnerOpacity = useSharedValue(0);
   const floatingAnimation = useSharedValue(0);
 
   const gradientColors = {
@@ -89,7 +93,19 @@ export default function Wallet() {
   useEffect(() => {
     fetchWalletData();
     startAnimations();
+    startFloatingAnimation();
   }, []);
+
+  const startFloatingAnimation = () => {
+    const repeatFloat = () => {
+      floatingAnimation.value = withSequence(
+        withTiming(1, { duration: 3000 }),
+        withTiming(-1, { duration: 3000 }),
+        withTiming(0, { duration: 0 }, () => runOnJS(repeatFloat)())
+      );
+    };
+    repeatFloat();
+  };
 
   const startAnimations = () => {
     headerTranslateY.value = withSpring(0, { damping: 25, stiffness: 120 });
@@ -106,21 +122,6 @@ export default function Wallet() {
       withSpring(0, { damping: 25, stiffness: 120 })
     );
     cardsOpacity.value = withDelay(600, withTiming(1, { duration: 900 }));
-
-    spinnerScale.value = withDelay(
-      300,
-      withSpring(1, { damping: 20, stiffness: 150 })
-    );
-    spinnerOpacity.value = withDelay(300, withTiming(1, { duration: 800 }));
-
-    const repeatFloat = () => {
-      floatingAnimation.value = withSequence(
-        withTiming(1, { duration: 3000 }),
-        withTiming(-1, { duration: 3000 }),
-        withTiming(0, { duration: 0 }, () => runOnJS(repeatFloat)())
-      );
-    };
-    repeatFloat();
   };
 
   const onRefresh = () => {
@@ -181,16 +182,35 @@ export default function Wallet() {
       Alert.alert("Error", "Please enter a valid amount");
       return;
     }
-
+    if (!accountName.trim()) {
+      Alert.alert("Error", "Please enter the account name");
+      return;
+    }
+    if (!bankName.trim()) {
+      Alert.alert("Error", "Please enter the bank name");
+      return;
+    }
+    if (!accountNumber.trim() || !/^\d{10}$/.test(accountNumber)) {
+      Alert.alert("Error", "Please enter a valid 10-digit account number");
+      return;
+    }
     if (amount > wallet.balance) {
       Alert.alert("Error", "Insufficient balance");
       return;
     }
 
     try {
-      await apiService.post("/wallet/withdraw", { amount });
+      await apiService.post("/wallet/withdraw", {
+        amount,
+        account_name: accountName,
+        bank_name: bankName,
+        account_number: accountNumber,
+      });
       Alert.alert("Success", "Withdrawal request submitted successfully");
       setWithdrawAmount("");
+      setAccountName("");
+      setBankName("");
+      setAccountNumber("");
       setShowWithdraw(false);
       fetchWalletData();
     } catch (error: any) {
@@ -207,7 +227,7 @@ export default function Wallet() {
         <Ionicons
           name={transaction.type === "credit" ? "add-circle" : "remove-circle"}
           size={20}
-          color={transaction.type === "credit" ? "#d4af37" : "#c0c0c0"}
+          color={transaction.type === "credit" ? "#d4af37" : "#ef4444"}
         />
       </View>
     );
@@ -242,21 +262,6 @@ export default function Wallet() {
     };
   });
 
-  const animatedSpinnerStyle = useAnimatedStyle(() => {
-    const floatingOffset = interpolate(
-      floatingAnimation.value,
-      [-1, 0, 1],
-      [-2, 0, 2]
-    );
-    return {
-      transform: [
-        { scale: spinnerScale.value },
-        { translateY: floatingOffset },
-      ],
-      opacity: spinnerOpacity.value,
-    };
-  });
-
   if (loading) {
     return (
       <View style={styles.container}>
@@ -267,10 +272,10 @@ export default function Wallet() {
         >
           <View style={styles.loadingContainer}>
             <Animated.View
-              style={[styles.loadingSpinner, animatedSpinnerStyle]}
+              style={[styles.loadingSpinner, animatedBalanceStyle]}
             >
               <View style={styles.loadingSpinnerInner}>
-                <Ionicons name="wallet-outline" size={32} color="#d4af37" />
+                <Ionicons name="wallet-outline" size={48} color="#d4af37" />
               </View>
             </Animated.View>
             <Text style={styles.loadingText}>Loading wallet</Text>
@@ -289,30 +294,6 @@ export default function Wallet() {
         style={styles.backgroundGradient}
       />
 
-      <View style={styles.decorativeElements}>
-        <Animated.View
-          style={[
-            styles.floatingCircle,
-            styles.circle1,
-            { transform: [{ translateY: floatingAnimation.value }] },
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.floatingCircle,
-            styles.circle2,
-            { transform: [{ translateY: floatingAnimation.value }] },
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.floatingCircle,
-            styles.circle3,
-            { transform: [{ translateY: floatingAnimation.value }] },
-          ]}
-        />
-      </View>
-
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -328,22 +309,31 @@ export default function Wallet() {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={[styles.header, animatedHeaderStyle]}>
-          <Text style={styles.title}>My Wallet</Text>
-          <Text style={styles.subtitle}>Manage your funds</Text>
+          <View style={styles.headerContent}>
+            <View style={styles.greetingSection}>
+              <Text style={styles.title}>My Wallet</Text>
+              <Text style={styles.subtitle}>Manage your funds</Text>
+            </View>
+          </View>
         </Animated.View>
 
-        <Animated.View style={[styles.balanceCard, animatedBalanceStyle]}>
-          <View style={styles.balanceContent}>
-            <View style={styles.balanceIconContainer}>
-              <Ionicons name="wallet-outline" size={24} color="#d4af37" />
+        <Animated.View style={[styles.walletSection, animatedBalanceStyle]}>
+          <View style={styles.walletCard}>
+            <View style={styles.walletHeader}>
+              <View style={styles.walletIconContainer}>
+                <Ionicons name="wallet-outline" size={24} color="#d4af37" />
+              </View>
+              <View style={styles.walletInfo}>
+                <Text style={styles.walletLabel}>Available Balance</Text>
+                <Text style={styles.walletBalance}>
+                  ₦{wallet.balance.toLocaleString()}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.balanceLabel}>Available Balance</Text>
-            <Text style={styles.balanceAmount}>
-              ₦{wallet.balance.toLocaleString()}
-            </Text>
+
             <View style={styles.actionButtons}>
               <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: "#d4af37" }]}
+                style={[styles.actionButton, styles.topUpButton]}
                 onPress={() => setShowTopUp(!showTopUp)}
                 activeOpacity={0.7}
               >
@@ -351,7 +341,7 @@ export default function Wallet() {
                 <Text style={styles.actionButtonText}>Top Up</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: "#c0c0c0" }]}
+                style={[styles.actionButton, styles.withdrawButton]}
                 onPress={() => setShowWithdraw(!showWithdraw)}
                 activeOpacity={0.7}
               >
@@ -364,29 +354,53 @@ export default function Wallet() {
 
         {showTopUp && (
           <Animated.View style={[styles.transactionCard, animatedCardStyle]}>
-            <Text style={styles.transactionTitle}>Top Up Wallet</Text>
-            <View style={styles.quickAmounts}>
-              {quickAmounts.map((amount) => (
-                <TouchableOpacity
-                  key={amount}
-                  style={styles.quickAmountButton}
-                  onPress={() => setTopUpAmount(amount.toString())}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.quickAmountText}>
-                    ₦{amount.toLocaleString()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.transactionHeader}>
+              <View style={styles.transactionIconBg}>
+                <Ionicons name="add-circle" size={20} color="#d4af37" />
+              </View>
+              <Text style={styles.transactionTitle}>Top Up Wallet</Text>
             </View>
-            <TextInput
-              style={styles.amountInput}
-              placeholder="Enter amount"
-              placeholderTextColor="rgba(255, 255, 255, 0.6)"
-              value={topUpAmount}
-              onChangeText={setTopUpAmount}
-              keyboardType="numeric"
-            />
+
+            <View style={styles.quickAmountsSection}>
+              <Text style={styles.quickAmountsLabel}>Quick amounts</Text>
+              <View style={styles.quickAmounts}>
+                {quickAmounts.map((amount) => (
+                  <TouchableOpacity
+                    key={amount}
+                    style={[
+                      styles.quickAmountButton,
+                      topUpAmount === amount.toString() &&
+                        styles.quickAmountButtonActive,
+                    ]}
+                    onPress={() => setTopUpAmount(amount.toString())}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.quickAmountText,
+                        topUpAmount === amount.toString() &&
+                          styles.quickAmountTextActive,
+                      ]}
+                    >
+                      ₦{amount.toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Custom amount</Text>
+              <TextInput
+                style={styles.amountInput}
+                placeholder="Enter amount"
+                placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                value={topUpAmount}
+                onChangeText={setTopUpAmount}
+                keyboardType="numeric"
+              />
+            </View>
+
             <View style={styles.transactionButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
@@ -396,7 +410,7 @@ export default function Wallet() {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.confirmButton, { backgroundColor: "#d4af37" }]}
+                style={styles.confirmButton}
                 onPress={handleTopUp}
                 activeOpacity={0.7}
               >
@@ -408,28 +422,89 @@ export default function Wallet() {
 
         {showWithdraw && (
           <Animated.View style={[styles.transactionCard, animatedCardStyle]}>
-            <Text style={styles.transactionTitle}>Withdraw Funds</Text>
-            <TextInput
-              style={styles.amountInput}
-              placeholder="Enter amount"
-              placeholderTextColor="rgba(255, 255, 255, 0.6)"
-              value={withdrawAmount}
-              onChangeText={setWithdrawAmount}
-              keyboardType="numeric"
-            />
-            <Text style={styles.withdrawNote}>
-              Withdrawal requests are processed within 24 hours
-            </Text>
+            <View style={styles.transactionHeader}>
+              <View style={styles.transactionIconBg}>
+                <Ionicons name="remove-circle" size={20} color="#ef4444" />
+              </View>
+              <Text style={styles.transactionTitle}>Withdraw Funds</Text>
+            </View>
+
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Withdrawal amount</Text>
+              <TextInput
+                style={styles.amountInput}
+                placeholder="Enter amount"
+                placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                value={withdrawAmount}
+                onChangeText={setWithdrawAmount}
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Account Name</Text>
+              <TextInput
+                style={styles.amountInput}
+                placeholder="Enter account name"
+                placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                value={accountName}
+                onChangeText={setAccountName}
+                keyboardType="default"
+              />
+            </View>
+
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Bank Name</Text>
+              <TextInput
+                style={styles.amountInput}
+                placeholder="Enter bank name"
+                placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                value={bankName}
+                onChangeText={setBankName}
+                keyboardType="default"
+              />
+            </View>
+
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Account Number</Text>
+              <TextInput
+                style={styles.amountInput}
+                placeholder="Enter 10-digit account number"
+                placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                value={accountNumber}
+                onChangeText={setAccountNumber}
+                keyboardType="numeric"
+                maxLength={10}
+              />
+            </View>
+
+            <View style={styles.withdrawNotice}>
+              <Ionicons
+                name="information-circle-outline"
+                size={16}
+                color="rgba(255, 255, 255, 0.6)"
+              />
+              <Text style={styles.withdrawNote}>
+                Withdrawal requests are processed within 24 hours
+              </Text>
+            </View>
+
             <View style={styles.transactionButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
-                onPress={() => setShowWithdraw(false)}
+                onPress={() => {
+                  setWithdrawAmount("");
+                  setAccountName("");
+                  setBankName("");
+                  setAccountNumber("");
+                  setShowWithdraw(false);
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.confirmButton, { backgroundColor: "#d4af37" }]}
+                style={[styles.confirmButton, styles.withdrawConfirmButton]}
                 onPress={handleWithdraw}
                 activeOpacity={0.7}
               >
@@ -440,34 +515,83 @@ export default function Wallet() {
         )}
 
         <Animated.View style={[styles.transactionsSection, animatedCardStyle]}>
-          <Text style={styles.sectionTitle}>Recent Transactions</Text>
-          {wallet.transactions.map((transaction) => (
-            <View key={transaction._id} style={styles.transactionItem}>
-              <View style={styles.transactionLeft}>
-                {getTransactionIcon(transaction)}
-                <View style={styles.transactionDetails}>
-                  <Text style={styles.transactionDescription}>
-                    {transaction.description}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Transactions</Text>
+            <Text style={styles.sectionSubtitle}>
+              {wallet.transactions.length} transaction
+              {wallet.transactions.length !== 1 ? "s" : ""}
+            </Text>
+          </View>
+
+          <View style={styles.transactionsList}>
+            {wallet.transactions.map((transaction) => (
+              <View key={transaction._id} style={styles.transactionItem}>
+                <View style={styles.transactionLeft}>
+                  {getTransactionIcon(transaction)}
+                  <View style={styles.transactionDetails}>
+                    <Text style={styles.transactionDescription}>
+                      {transaction.description}
+                    </Text>
+                    {transaction.account_name &&
+                      transaction.bank_name &&
+                      transaction.account_number && (
+                        <Text style={styles.transactionSubtext}>
+                          {transaction.account_name} ({transaction.bank_name},{" "}
+                          {transaction.account_number})
+                        </Text>
+                      )}
+                    <Text style={styles.transactionDate}>
+                      {new Date(transaction.date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.transactionRight}>
+                  <Text
+                    style={[
+                      styles.transactionAmount,
+                      {
+                        color:
+                          transaction.type === "credit" ? "#10b981" : "#ef4444",
+                      },
+                    ]}
+                  >
+                    {transaction.type === "credit" ? "+" : "-"}₦
+                    {transaction.amount.toLocaleString()}
                   </Text>
-                  <Text style={styles.transactionDate}>
-                    {new Date(transaction.date).toLocaleDateString()}
-                  </Text>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        backgroundColor:
+                          transaction.status === "completed"
+                            ? "rgba(16, 185, 129, 0.1)"
+                            : "rgba(239, 68, 68, 0.1)",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusText,
+                        {
+                          color:
+                            transaction.status === "completed"
+                              ? "#10b981"
+                              : "#ef4444",
+                        },
+                      ]}
+                    >
+                      {transaction.status}
+                    </Text>
+                  </View>
                 </View>
               </View>
-              <Text
-                style={[
-                  styles.transactionAmount,
-                  {
-                    color:
-                      transaction.type === "credit" ? "#d4af37" : "#c0c0c0",
-                  },
-                ]}
-              >
-                {transaction.type === "credit" ? "+" : "-"}₦
-                {transaction.amount.toLocaleString()}
-              </Text>
-            </View>
-          ))}
+            ))}
+          </View>
+
           {wallet.transactions.length === 0 && (
             <View style={styles.emptyState}>
               <View style={styles.emptyStateIcon}>
@@ -496,39 +620,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-  },
-  decorativeElements: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    overflow: "hidden",
-  },
-  floatingCircle: {
-    position: "absolute",
-    borderRadius: 1000,
-    backgroundColor: "rgba(212, 175, 55, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(212, 175, 55, 0.2)",
-  },
-  circle1: {
-    width: 200,
-    height: 200,
-    top: -100,
-    right: -100,
-  },
-  circle2: {
-    width: 150,
-    height: 150,
-    bottom: 100,
-    left: -75,
-  },
-  circle3: {
-    width: 100,
-    height: 100,
-    top: height * 0.3,
-    right: -50,
   },
   loadingContainer: {
     flex: 1,
@@ -573,6 +664,14 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === "ios" ? 60 : 40,
     paddingBottom: 32,
   },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  greetingSection: {
+    flex: 1,
+  },
   title: {
     fontSize: 24,
     fontWeight: "700",
@@ -585,19 +684,23 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.7)",
     fontWeight: "400",
   },
-  balanceCard: {
+  walletSection: {
     marginHorizontal: 24,
     marginBottom: 32,
   },
-  balanceContent: {
+  walletCard: {
     backgroundColor: "rgba(255, 255, 255, 0.05)",
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
-    alignItems: "center",
   },
-  balanceIconContainer: {
+  walletHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  walletIconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -606,9 +709,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(212, 175, 55, 0.2)",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginRight: 16,
   },
-  balanceLabel: {
+  walletInfo: {
+    flex: 1,
+  },
+  walletLabel: {
     fontSize: 14,
     color: "rgba(255, 255, 255, 0.6)",
     fontWeight: "500",
@@ -616,18 +722,18 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  balanceAmount: {
+  walletBalance: {
     fontSize: 28,
     fontWeight: "700",
     color: "#ffffff",
     letterSpacing: -1,
-    marginBottom: 20,
   },
   actionButtons: {
     flexDirection: "row",
     gap: 12,
   },
   actionButton: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -635,6 +741,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 8,
     gap: 8,
+  },
+  topUpButton: {
+    backgroundColor: "#d4af37",
+  },
+  withdrawButton: {
+    backgroundColor: "#ef4444",
   },
   actionButtonText: {
     color: "#0a0a0a",
@@ -650,18 +762,43 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.1)",
     padding: 20,
   },
+  transactionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  transactionIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(212, 175, 55, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
   transactionTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#ffffff",
-    marginBottom: 16,
     letterSpacing: -0.5,
+  },
+  quickAmountsSection: {
+    marginBottom: 20,
+  },
+  quickAmountsLabel: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.6)",
+    fontWeight: "500",
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   quickAmounts: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: 16,
   },
   quickAmountButton: {
     backgroundColor: "rgba(255, 255, 255, 0.05)",
@@ -671,10 +808,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
+  quickAmountButtonActive: {
+    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    borderColor: "rgba(212, 175, 55, 0.3)",
+  },
   quickAmountText: {
     fontSize: 14,
-    color: "#d4af37",
+    color: "rgba(255, 255, 255, 0.7)",
     fontWeight: "600",
+  },
+  quickAmountTextActive: {
+    color: "#d4af37",
+  },
+  inputSection: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.6)",
+    fontWeight: "500",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   amountInput: {
     borderWidth: 1,
@@ -683,15 +838,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     fontSize: 16,
-    marginBottom: 16,
     backgroundColor: "rgba(255, 255, 255, 0.05)",
     color: "#ffffff",
+    fontWeight: "500",
+  },
+  withdrawNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
   },
   withdrawNote: {
     fontSize: 12,
     color: "rgba(255, 255, 255, 0.6)",
-    marginBottom: 16,
-    textAlign: "center",
+    flex: 1,
   },
   transactionButtons: {
     flexDirection: "row",
@@ -714,6 +877,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 8,
+    backgroundColor: "#d4af37",
+  },
+  withdrawConfirmButton: {
+    backgroundColor: "#ef4444",
   },
   confirmButtonText: {
     textAlign: "center",
@@ -723,12 +890,23 @@ const styles = StyleSheet.create({
   transactionsSection: {
     paddingHorizontal: 24,
   },
+  sectionHeader: {
+    marginBottom: 20,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "700",
     color: "#ffffff",
-    marginBottom: 16,
+    marginBottom: 4,
     letterSpacing: -0.5,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.6)",
+    fontWeight: "400",
+  },
+  transactionsList: {
+    gap: 8,
   },
   transactionItem: {
     backgroundColor: "rgba(255, 255, 255, 0.05)",
@@ -737,7 +915,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     borderRadius: 12,
-    marginBottom: 8,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
@@ -766,14 +943,35 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginBottom: 2,
   },
+  transactionSubtext: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.6)",
+    fontWeight: "400",
+    marginBottom: 2,
+  },
   transactionDate: {
     fontSize: 12,
-    color: "rgba(255, 255, 255, 0.7)",
+    color: "rgba(255, 255, 255, 0.6)",
     fontWeight: "500",
+  },
+  transactionRight: {
+    alignItems: "flex-end",
+    gap: 4,
   },
   transactionAmount: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   emptyState: {
     alignItems: "center",
