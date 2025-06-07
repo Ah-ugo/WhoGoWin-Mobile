@@ -1,5 +1,7 @@
 import { apiService } from "@/services/apiService";
+import { registerForPushNotificationsAsync } from "@/services/notificationService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 import React, {
   createContext,
   ReactNode,
@@ -74,6 +76,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         "Authorization"
       ] = `Bearer ${access_token}`;
       setUser(userData);
+      const result = await registerForPushNotificationsAsync();
+      if (typeof result !== "string") {
+        console.warn("Push notification registration failed:", result.message);
+      }
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || "Login failed");
     }
@@ -93,6 +99,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         "Authorization"
       ] = `Bearer ${access_token}`;
       setUser(userData);
+      const result = await registerForPushNotificationsAsync();
+      if (typeof result !== "string") {
+        console.warn("Push notification registration failed:", result.message);
+      }
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || "Registration failed");
     }
@@ -103,6 +113,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await AsyncStorage.removeItem("authToken");
       delete apiService.defaults.headers.common["Authorization"];
       setUser(null);
+      router.push("/(auth)/login");
     } catch (error) {
       console.error("Logout error:", error);
     }

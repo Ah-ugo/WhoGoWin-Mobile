@@ -1,4 +1,3 @@
-import { registerForPushNotificationsAsync } from "@/services/notificationService";
 // import * as Notifications from "expo-notifications";
 import { Notification } from "@/models/notification";
 import { apiService } from "@/services/apiService";
@@ -40,8 +39,8 @@ interface NotificationProviderProps {
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldPlaySound: false,
-    shouldSetBadge: false,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true,
   }),
@@ -72,12 +71,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
     // });
 
     // Register for push notifications
-    registerForPushNotificationsAsync().then((result) => {
-      if (typeof result !== "string") {
-        setError(result.message);
-        console.warn("Push notification registration failed:", result.message);
-      }
-    });
+    // registerForPushNotificationsAsync().then((result) => {
+    //   if (typeof result !== "string") {
+    //     setError(result.message);
+    //     console.warn("Push notification registration failed:", result.message);
+    //   }
+    // });
 
     // Handle notifications received while app is in foreground
     const foregroundSubscription =

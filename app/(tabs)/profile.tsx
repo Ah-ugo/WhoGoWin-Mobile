@@ -85,7 +85,7 @@ export default function Profile() {
 
   const fetchProfileData = async () => {
     try {
-      const response = await apiService.get("/users/profile");
+      const response = await apiService.get("/users/me");
       const fetchedProfile: User = response.data;
       setProfile(fetchedProfile);
       setNewName(fetchedProfile.name);

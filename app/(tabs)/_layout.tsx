@@ -73,9 +73,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(26, 26, 26, 0.95)", // Dark frosted-glass effect
     // borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.1)", // Subtle white border
-    paddingBottom: 8,
-    paddingTop: 8,
-    height: 60, // Increased height for better touch area
+    // paddingBottom: 8,
+    // paddingTop: 8,
+    // height: 60, // Increased height for better touch area
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,

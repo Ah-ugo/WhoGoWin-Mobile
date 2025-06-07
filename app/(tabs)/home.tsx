@@ -266,7 +266,10 @@ export default function Home() {
               </Text>
               <Text style={styles.subtitle}>Ready to play?</Text>
             </View>
-            <TouchableOpacity style={styles.profileButton}>
+            <TouchableOpacity
+              onPress={() => router.push("/(tabs)/profile")}
+              style={styles.profileButton}
+            >
               <View style={styles.profileButtonInner}>
                 <Ionicons name="person-outline" size={20} color="#d4af37" />
               </View>
