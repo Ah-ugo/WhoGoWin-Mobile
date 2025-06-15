@@ -1,6 +1,7 @@
-// import * as Notifications from "expo-notifications";
+// NotificationProvider.tsx
 import { Notification } from "@/models/notification";
 import { apiService } from "@/services/apiService";
+import { registerForPushNotificationsAsync } from "@/services/notificationService";
 import { useNavigation } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import React, {
@@ -10,6 +11,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { useAuth } from "./AuthContext";
 
 interface NotificationContextType {
   notifications: Notification[];
@@ -51,44 +53,65 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
 }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const navigation = useNavigation<any>(); // Adjust type based on navigation stack
+  const navigation = useNavigation<any>();
+  const { user } = useAuth();
 
   useEffect(() => {
-    // Notifications.setNotificationHandler({
-    //   handleNotification: async () => ({
-    //     shouldShowAlert: true,
-    //     shouldPlaySound: true,
-    //     shouldSetBadge: false,
-    //     // Handle iOS-specific banner display
-    //     ...(Platform.OS === "ios" ? { shouldShowBanner: true } : {}),
-    //     // Handle foreground notifications (applies to both iOS and Android)
-    //     shouldShowInForeground: true,
-    //     // Handle Android-specific priority
-    //     ...(Platform.OS === "android"
-    //       ? { priority: Notifications.AndroidNotificationPriority.HIGH }
-    //       : {}),
-    //   }),
-    // });
+    const registerPushNotifications = async () => {
+      if (!user) {
+        console.log("No user authenticated, skipping push token registration");
+        return;
+      }
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          const result = await registerForPushNotificationsAsync();
+          if (typeof result !== "string") {
+            setError(result.message);
+            console.warn(
+              "Push notification registration failed:",
+              result.message
+            );
+            retries--;
+            if (retries > 0) {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              continue;
+            }
+          } else {
+            console.log("Push token registration successful");
+          }
+          break;
+        } catch (err) {
+          const errorMessage =
+            err instanceof Error
+              ? err.message
+              : "Unknown error registering push token";
+          setError(errorMessage);
+          console.error(
+            "Error in registerPushNotifications:",
+            errorMessage,
+            err
+          );
+          retries--;
+          if (retries > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+        }
+      }
+    };
 
-    // Register for push notifications
-    // registerForPushNotificationsAsync().then((result) => {
-    //   if (typeof result !== "string") {
-    //     setError(result.message);
-    //     console.warn("Push notification registration failed:", result.message);
-    //   }
-    // });
+    registerPushNotifications();
+    fetchNotifications();
 
-    // Handle notifications received while app is in foreground
     const foregroundSubscription =
       Notifications.addNotificationReceivedListener((notification) => {
         const data = notification.request.content.data;
         console.log("Foreground notification received:", notification);
         if (data?.type === "draw_reminder") {
-          fetchNotifications(); // Refresh notifications
+          fetchNotifications();
         }
       });
 
-    // Handle notification taps (foreground or background)
     const responseSubscription =
       Notifications.addNotificationResponseReceivedListener((response) => {
         const data = response.notification.request.content.data;
@@ -98,15 +121,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
         }
       });
 
-    // Fetch initial notifications
-    fetchNotifications();
-
-    // Cleanup subscriptions
     return () => {
       foregroundSubscription.remove();
       responseSubscription.remove();
     };
-  }, [navigation]);
+  }, [navigation, user]);
 
   const fetchNotifications = async () => {
     try {
@@ -140,8 +159,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   const markNotificationsRead = async (ids: string[]) => {
     try {
       setError(null);
-      // Note: Using admin endpoint as backend lacks user-level endpoint
-      await apiService.put("/notifications/update", {
+      await apiService.put("/notifications/mark-read", {
         notification_ids: ids,
         read: true,
       });

@@ -1,3 +1,5 @@
+// notificationService.ts
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
@@ -49,17 +51,24 @@ export async function registerForPushNotificationsAsync(): Promise<
 
     token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
 
+    // Verify auth token exists
+    const authToken = await AsyncStorage.getItem("authToken");
+    if (!authToken) {
+      return { message: "User not authenticated" };
+    }
+
+    // Ensure Authorization header is set
+    apiService.defaults.headers.common["Authorization"] = `Bearer ${authToken}`;
+
     // Send token to backend
     await apiService.post("/notifications/register-token", { token });
-    console.log("Push token registered:", token);
+    console.log("Push token registered successfully:", token);
     return token;
   } catch (error) {
-    console.error("Error registering push token:", error);
-    return {
-      message: `Failed to register push token: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`,
-    };
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("Error registering push token:", errorMessage, error);
+    return { message: `Failed to register push token: ${errorMessage}` };
   }
 }
 

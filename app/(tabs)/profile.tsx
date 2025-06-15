@@ -1,4 +1,6 @@
+// Profile.tsx
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -30,6 +32,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useAuth } from "../../contexts/AuthContext";
 import { apiService } from "../../services/apiService";
+import { registerForPushNotificationsAsync } from "../../services/notificationService";
 
 const { width, height } = Dimensions.get("window");
 
@@ -37,6 +40,7 @@ interface User {
   name: string;
   email: string;
   referral_code?: string;
+  push_token?: string; // Add push_token to check notification status
 }
 
 interface AuthContextType {
@@ -89,6 +93,13 @@ export default function Profile() {
       const fetchedProfile: User = response.data;
       setProfile(fetchedProfile);
       setNewName(fetchedProfile.name);
+      // Set notificationsEnabled based on whether push_token exists
+      const isEnabled = !!fetchedProfile.push_token;
+      setNotificationsEnabled(isEnabled);
+      await AsyncStorage.setItem(
+        "notificationsEnabled",
+        JSON.stringify(isEnabled)
+      );
     } catch (error: unknown) {
       console.error("Error fetching profile data:", error);
       const message =
@@ -102,10 +113,56 @@ export default function Profile() {
     }
   };
 
+  const initializeNotificationToggle = async () => {
+    try {
+      const storedState = await AsyncStorage.getItem("notificationsEnabled");
+      if (storedState !== null) {
+        setNotificationsEnabled(JSON.parse(storedState));
+      }
+    } catch (error) {
+      console.error("Error reading notification toggle state:", error);
+    }
+  };
+
   useEffect(() => {
+    initializeNotificationToggle();
     fetchProfileData();
     startAnimations();
   }, []);
+
+  const handleNotificationToggle = async (value: boolean) => {
+    setNotificationsEnabled(value);
+    try {
+      await AsyncStorage.setItem("notificationsEnabled", JSON.stringify(value));
+      if (value) {
+        // Register push token
+        const result = await registerForPushNotificationsAsync();
+        if (typeof result !== "string") {
+          throw new Error(result.message);
+        }
+        Alert.alert("Success", "Push notifications enabled");
+      } else {
+        // Deregister push token
+        await apiService.delete("/notifications/deregister-token");
+        Alert.alert("Success", "Push notifications disabled");
+      }
+      // Refresh profile to update push_token status
+      await fetchProfileData();
+    } catch (error) {
+      console.error("Error toggling notifications:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update notification settings";
+      Alert.alert("Error", message);
+      // Revert toggle state on error
+      setNotificationsEnabled(!value);
+      await AsyncStorage.setItem(
+        "notificationsEnabled",
+        JSON.stringify(!value)
+      );
+    }
+  };
 
   const startAnimations = () => {
     headerTranslateY.value = withSpring(0, { damping: 25, stiffness: 120 });
@@ -430,7 +487,7 @@ export default function Profile() {
               </View>
               <Switch
                 value={notificationsEnabled}
-                onValueChange={setNotificationsEnabled}
+                onValueChange={handleNotificationToggle}
                 trackColor={{
                   false: "rgba(255, 255, 255, 0.1)",
                   true: "#d4af37",

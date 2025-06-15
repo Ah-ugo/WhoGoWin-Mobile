@@ -22,32 +22,27 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { useAuth } from "../../contexts/AuthContext";
 
 const { width, height } = Dimensions.get("window");
 
-interface AuthContextType {
-  login: (email: string, password: string) => Promise<void>;
+type IoniconsName =
+  | "gem"
+  | "mail-outline"
+  | "arrow-back"
+  | "refresh"
+  | "checkmark-circle"
+  | "send";
+
+interface ForgotPasswordRequest {
+  email: string;
 }
 
-type IoniconsName =
-  | "gem" // Replaced 'diamond' with 'gem'
-  | "mail-outline"
-  | "lock-closed-outline"
-  | "eye-outline"
-  | "eye-off-outline"
-  | "refresh"
-  | "arrow-forward";
-
-export default function Login() {
+export default function ForgotPassword() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
-  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
-  const { login } = useAuth() as AuthContextType;
   const router = useRouter();
 
   // Animation values
@@ -57,6 +52,7 @@ export default function Login() {
   const formTranslateY = useSharedValue(50);
   const buttonScale = useSharedValue(1);
   const loadingRotation = useSharedValue(0);
+  const successScale = useSharedValue(0);
 
   useEffect(() => {
     // Entrance animations
@@ -66,6 +62,12 @@ export default function Login() {
     formOpacity.value = withDelay(600, withTiming(1, { duration: 800 }));
     formTranslateY.value = withDelay(600, withSpring(0, { damping: 15 }));
   }, []);
+
+  useEffect(() => {
+    if (emailSent) {
+      successScale.value = withSpring(1, { damping: 12 });
+    }
+  }, [emailSent]);
 
   const animatedTitleStyle = useAnimatedStyle(() => ({
     opacity: titleOpacity.value,
@@ -85,8 +87,12 @@ export default function Login() {
     transform: [{ rotate: `${loadingRotation.value}deg` }],
   }));
 
-  const handleLogin = async () => {
-    if (!email || !password) {
+  const animatedSuccessStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: successScale.value }],
+  }));
+
+  const handleForgotPassword = async () => {
+    if (!email) {
       // Shake animation for error
       buttonScale.value = withSequence(
         withTiming(0.98, { duration: 100 }),
@@ -94,7 +100,20 @@ export default function Login() {
         withTiming(0.98, { duration: 100 }),
         withTiming(1, { duration: 100 })
       );
-      Alert.alert("Error", "Please fill in all fields");
+      Alert.alert("Error", "Please enter your email address");
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      buttonScale.value = withSequence(
+        withTiming(0.98, { duration: 100 }),
+        withTiming(1.02, { duration: 100 }),
+        withTiming(0.98, { duration: 100 }),
+        withTiming(1, { duration: 100 })
+      );
+      Alert.alert("Error", "Please enter a valid email address");
       return;
     }
 
@@ -102,19 +121,34 @@ export default function Login() {
     loadingRotation.value = withTiming(360, { duration: 1000 });
 
     try {
-      await login(email, password);
-      // Success animation
-      buttonScale.value = withSpring(1.05, { damping: 10 }, () => {
-        buttonScale.value = withSpring(1);
-      });
-      router.replace("/(tabs)/home");
-    } catch (error: unknown) {
-      loadingRotation.value = 0;
-      const message =
-        error instanceof Error && "response" in error
-          ? (error as any).response?.data?.detail || "Invalid credentials"
-          : "Invalid credentials";
-      Alert.alert("Login Failed", message);
+      const response = await fetch(
+        "https://whogowin.onrender.com/api/v1/auth/forgot-password",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setEmailSent(true);
+        // Success animation
+        buttonScale.value = withSpring(1.05, { damping: 10 }, () => {
+          buttonScale.value = withSpring(1);
+        });
+      } else {
+        // Even if there's an error, we show success to prevent email enumeration
+        // This matches your backend behavior
+        setEmailSent(true);
+      }
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      // Still show success to prevent email enumeration
+      setEmailSent(true);
     } finally {
       setLoading(false);
       loadingRotation.value = 0;
@@ -122,11 +156,107 @@ export default function Login() {
   };
 
   const handleButtonPress = () => {
-    buttonScale.value = withSpring(0.95, { duration: 100 }, () => {
-      buttonScale.value = withSpring(1);
-    });
-    handleLogin();
+    if (!emailSent) {
+      buttonScale.value = withSpring(0.95, { duration: 100 }, () => {
+        buttonScale.value = withSpring(1);
+      });
+      handleForgotPassword();
+    }
   };
+
+  const handleBackToLogin = () => {
+    router.back();
+  };
+
+  const handleTryAgain = () => {
+    setEmailSent(false);
+    setEmail("");
+    successScale.value = 0;
+  };
+
+  if (emailSent) {
+    return (
+      <>
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor="transparent"
+          translucent
+        />
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          {/* Animated Background */}
+          <View style={styles.backgroundGradient}>
+            <LinearGradient
+              colors={["#0a0a0a", "#1a1a1a"]}
+              style={styles.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            />
+          </View>
+
+          {/* Floating Elements */}
+          <View style={styles.floatingElements}>
+            <View style={[styles.floatingCircle, styles.circle1]} />
+            <View style={[styles.floatingCircle, styles.circle2]} />
+            <View style={[styles.floatingCircle, styles.circle3]} />
+          </View>
+
+          <View style={styles.content}>
+            <Animated.View
+              style={[styles.successContainer, animatedSuccessStyle]}
+            >
+              <View style={styles.successIconContainer}>
+                <LinearGradient
+                  colors={["#d4af37", "#b8941f"]}
+                  style={styles.successIconGradient}
+                >
+                  <Ionicons name="checkmark-circle" size={60} color="#0a0a0a" />
+                </LinearGradient>
+              </View>
+
+              <Text style={styles.successTitle}>Check Your Email</Text>
+              <Text style={styles.successMessage}>
+                If an account exists with {email}, a password reset link has
+                been sent.
+              </Text>
+              <Text style={styles.successSubMessage}>
+                Check your email and follow the instructions to reset your
+                password.
+              </Text>
+
+              <View style={styles.successButtons}>
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={handleBackToLogin}
+                >
+                  <LinearGradient
+                    colors={["#d4af37", "#b8941f"]}
+                    style={[
+                      styles.buttonGradient,
+                      { paddingHorizontal: 20, paddingTop: 3 },
+                    ]}
+                  >
+                    <Text style={styles.primaryButtonText}>Back to Login</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={handleTryAgain}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    Try Different Email
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+          </View>
+        </KeyboardAvoidingView>
+      </>
+    );
+  }
 
   return (
     <>
@@ -159,6 +289,13 @@ export default function Login() {
         <View style={styles.content}>
           {/* Header Section */}
           <Animated.View style={[styles.header, animatedTitleStyle]}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={handleBackToLogin}
+            >
+              <Ionicons name="arrow-back" size={24} color="#d4af37" />
+            </TouchableOpacity>
+
             <View style={styles.logoContainer}>
               <LinearGradient
                 colors={["#d4af37", "#b8941f"]}
@@ -167,9 +304,10 @@ export default function Login() {
                 <Ionicons name="diamond" size={40} color="#0a0a0a" />
               </LinearGradient>
             </View>
-            <Text style={styles.title}>Welcome Back</Text>
+            <Text style={styles.title}>Forgot Password?</Text>
             <Text style={styles.subtitle}>
-              Sign in to continue your winning streak
+              Enter your email address and we'll send you a link to reset your
+              password
             </Text>
           </Animated.View>
 
@@ -204,44 +342,7 @@ export default function Login() {
                 </View>
               </View>
 
-              {/* Password Input */}
-              <View style={styles.inputContainer}>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    passwordFocused && styles.inputFocused,
-                  ]}
-                >
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={20}
-                    color={passwordFocused ? "#d4af37" : "#c0c0c0"}
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={[styles.input, styles.passwordInput]}
-                    placeholder="Password"
-                    placeholderTextColor="rgba(255, 255, 255, 0.7)"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                    onFocus={() => setPasswordFocused(true)}
-                    onBlur={() => setPasswordFocused(false)}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={styles.eyeIcon}
-                  >
-                    <Ionicons
-                      name={showPassword ? "eye-outline" : "eye-off-outline"}
-                      size={20}
-                      color="#c0c0c0"
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Login Button */}
+              {/* Send Reset Link Button */}
               <Animated.View style={animatedButtonStyle}>
                 <TouchableOpacity
                   style={[styles.button, loading && styles.buttonDisabled]}
@@ -260,40 +361,28 @@ export default function Login() {
                       <Animated.View style={animatedLoadingStyle}>
                         <Ionicons name="refresh" size={20} color="#0a0a0a" />
                       </Animated.View>
-                      <Text style={styles.buttonText}>Signing In...</Text>
+                      <Text style={styles.buttonText}>Sending...</Text>
                     </View>
                   ) : (
                     <>
-                      <Text style={styles.buttonText}>Sign In</Text>
-                      <Ionicons
-                        name="arrow-forward"
-                        size={20}
-                        color="#0a0a0a"
-                      />
+                      <Text style={styles.buttonText}>Send Reset Link</Text>
+                      <Ionicons name="send" size={20} color="#0a0a0a" />
                     </>
                   )}
                 </TouchableOpacity>
               </Animated.View>
-
-              {/* Forgot Password */}
-              <TouchableOpacity
-                onPress={() => router.push("/(auth)/resetPassword")}
-                style={styles.forgotPassword}
-              >
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-              </TouchableOpacity>
             </View>
           </Animated.View>
 
-          {/* Sign Up Link */}
+          {/* Back to Login Link */}
           <Animated.View style={[styles.footer, animatedFormStyle]}>
             <TouchableOpacity
               style={styles.linkButton}
-              onPress={() => router.push("/(auth)/register")}
+              onPress={handleBackToLogin}
             >
               <Text style={styles.linkText}>
-                Don't have an account?{" "}
-                <Text style={styles.linkTextBold}>Sign Up</Text>
+                Remember your password?{" "}
+                <Text style={styles.linkTextBold}>Sign In</Text>
               </Text>
             </TouchableOpacity>
           </Animated.View>
@@ -360,6 +449,14 @@ const styles = StyleSheet.create({
   header: {
     alignItems: "center",
     marginBottom: 32,
+    position: "relative",
+  },
+  backButton: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    padding: 8,
+    zIndex: 1,
   },
   logoContainer: {
     marginBottom: 16,
@@ -386,6 +483,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "rgba(255, 255, 255, 0.7)",
     fontWeight: "400",
+    paddingHorizontal: 16,
+    lineHeight: 24,
   },
   formContainer: {
     backgroundColor: "rgba(255, 255, 255, 0.05)",
@@ -425,14 +524,6 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "500",
   },
-  passwordInput: {
-    paddingRight: 50,
-  },
-  eyeIcon: {
-    position: "absolute",
-    right: 16,
-    padding: 4,
-  },
   button: {
     borderRadius: 12,
     paddingVertical: 16,
@@ -463,15 +554,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  forgotPassword: {
-    alignItems: "center",
-    marginTop: 16,
-  },
-  forgotPasswordText: {
-    color: "#d4af37",
-    fontSize: 14,
-    fontWeight: "600",
-  },
   footer: {
     alignItems: "center",
   },
@@ -486,5 +568,76 @@ const styles = StyleSheet.create({
   linkTextBold: {
     color: "#d4af37",
     fontWeight: "700",
+  },
+  // Success screen styles
+  successContainer: {
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  successIconContainer: {
+    marginBottom: 24,
+  },
+  successIconGradient: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(212, 175, 55, 0.2)",
+  },
+  successTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 12,
+    color: "#ffffff",
+    letterSpacing: -0.5,
+  },
+  successMessage: {
+    fontSize: 16,
+    textAlign: "center",
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "500",
+    marginBottom: 8,
+    lineHeight: 24,
+  },
+  successSubMessage: {
+    fontSize: 14,
+    textAlign: "center",
+    color: "rgba(255, 255, 255, 0.7)",
+    fontWeight: "400",
+    marginBottom: 32,
+    lineHeight: 20,
+  },
+  successButtons: {
+    width: "100%",
+    gap: 12,
+  },
+  primaryButton: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryButtonText: {
+    color: "#0a0a0a",
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  secondaryButton: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+  },
+  secondaryButtonText: {
+    color: "#d4af37",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

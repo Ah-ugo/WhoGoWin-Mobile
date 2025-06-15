@@ -1,6 +1,8 @@
+// AuthProvider.tsx
 import { apiService } from "@/services/apiService";
 import { registerForPushNotificationsAsync } from "@/services/notificationService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 import { router } from "expo-router";
 import React, {
   createContext,
@@ -54,6 +56,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         apiService.defaults.headers.common["Authorization"] = `Bearer ${token}`;
         const response = await apiService.get("/users/me");
         setUser(response.data);
+        // Register push token after confirming user
+        const result = await registerForPushNotificationsAsync();
+        if (typeof result !== "string") {
+          console.warn(
+            "Push notification registration failed:",
+            result.message
+          );
+        } else {
+          console.log("Push token registered during auth check");
+        }
       }
     } catch (error) {
       console.error("Auth check failed:", error);
@@ -65,10 +77,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await apiService.post("/auth/login", {
-        email,
-        password,
-      });
+      const response = await axios.post(
+        "https://whogowin.onrender.com/api/v1/auth/login",
+        {
+          email,
+          password,
+        }
+      );
       const { access_token, user: userData } = response.data;
 
       await AsyncStorage.setItem("authToken", access_token);
@@ -76,22 +91,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         "Authorization"
       ] = `Bearer ${access_token}`;
       setUser(userData);
-      const result = await registerForPushNotificationsAsync();
-      if (typeof result !== "string") {
-        console.warn("Push notification registration failed:", result.message);
-      }
+
+      // Register push token with retry
+      // let retries = 3;
+      // while (retries > 0) {
+      //   const result = await registerForPushNotificationsAsync();
+      //   if (typeof result === "string") {
+      //     console.log("Push token registered after login");
+      //     break;
+      //   }
+      //   console.warn("Push notification registration failed:", result.message);
+      //   retries--;
+      //   if (retries > 0)
+      //     await new Promise((resolve) => setTimeout(resolve, 2000));
+      // }
     } catch (error: any) {
+      console.error("Login error:", error);
       throw new Error(error.response?.data?.detail || "Login failed");
     }
   };
 
   const register = async (name: string, email: string, password: string) => {
     try {
-      const response = await apiService.post("/auth/register", {
-        name,
-        email,
-        password,
-      });
+      const response = await axios.post(
+        "https://whogowin.onrender.com/auth/register",
+        {
+          name,
+          email,
+          password,
+        }
+      );
       const { access_token, user: userData } = response.data;
 
       await AsyncStorage.setItem("authToken", access_token);
@@ -99,11 +128,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         "Authorization"
       ] = `Bearer ${access_token}`;
       setUser(userData);
-      const result = await registerForPushNotificationsAsync();
-      if (typeof result !== "string") {
-        console.warn("Push notification registration failed:", result.message);
-      }
+
+      // Register push token with retry
+      // let retries = 3;
+      // while (retries > 0) {
+      //   const result = await registerForPushNotificationsAsync();
+      //   if (typeof result === "string") {
+      //     console.log("Push token registered after registration");
+      //     break;
+      //   }
+      //   console.warn("Push notification registration failed:", result.message);
+      //   retries--;
+      //   if (retries > 0)
+      //     await new Promise((resolve) => setTimeout(resolve, 2000));
+      // }
     } catch (error: any) {
+      console.error("Registration error:", error);
       throw new Error(error.response?.data?.detail || "Registration failed");
     }
   };
